@@ -4,5 +4,5 @@
  * URL ini BUKAN rahasia; keamanan dijaga oleh login & token di server.
  */
 window.APP_CONFIG = {
-  GAS_URL: 'https://script.google.com/macros/s/GANTI_DENGAN_ID_DEPLOYMENT/exec'
+  GAS_URL: 'https://script.google.com/macros/s/AKfycbzYbhXO8kGFyXRqJmWjaUQTIJHE_oTB_s9g1Zn3exGjdYlozAScvWXaQVeTSM8jXaVz/exec'
 };
