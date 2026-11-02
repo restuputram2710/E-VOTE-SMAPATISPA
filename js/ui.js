@@ -48,6 +48,7 @@
     el.innerHTML = ic(type === 'ok' ? 'cekBulat' : type === 'bad' ? 'xBulat' : type === 'warn' ? 'peringatan' : 'info') + '<div>' + esc(msg) + '</div>';
     root.appendChild(el);
     setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 220); }, type === 'bad' ? 5200 : 3400);
+    return el;
   }
   function hasil(res, okMsg) {
     if (res && res.success) { if (okMsg !== false) toast(okMsg || res.message || 'Berhasil.', 'ok'); return true; }

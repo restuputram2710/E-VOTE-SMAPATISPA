@@ -65,6 +65,7 @@
           if (b.success) { petaFoto(b.data.ballot); const dev = EV.Sesi.perangkat(); if (dev) { dev.ballot = b.data.ballot; EV.Sesi.setPerangkat(dev); } }
         }
         M.etag = r.data.etag; M.live = r.data.live; M.meta = r.data.meta;
+        M.tayangPada = M.meta && M.meta.tayang ? Date.now() + M.meta.tayang.sisaMs : 0;
       }
       gambarSemua(false);
     } else if (r.code !== 'AUTH') {
@@ -125,7 +126,7 @@
         <div class="mstat"><div class="ms-ic">${ic('pengguna')}</div><div><div class="ms-lbl">Pemilih Terdaftar</div><div class="ms-val num" id="s-total">0</div></div></div>
         <div class="mstat"><div class="ms-ic">${ic('vote')}</div><div><div class="ms-lbl">Suara Masuk</div><div class="ms-val num"><span id="s-masuk">0</span><small id="s-belum"></small></div></div></div>
         <div class="mstat" id="s-ringbox"><div id="s-ring"></div><div><div class="ms-lbl">Partisipasi</div><div class="ms-val num" id="s-pct">0%</div></div></div>
-        <div class="mstat"><div class="ms-ic">${ic('segarkan')}</div><div><div class="ms-lbl">Pembaruan</div><div class="ms-val" style="font-size:calc(26 * var(--u))" id="s-upd">baru saja</div></div></div>`;
+        <div class="mstat"><div class="ms-ic">${ic('segarkan')}</div><div><div class="ms-lbl" id="s-upd-lbl">Pembaruan</div><div class="ms-val" style="font-size:calc(26 * var(--u))" id="s-upd">baru saja</div></div></div>`;
     }
     hitungNaik($('#s-total'), L.totalPemilih);
     const naik = M.masuk !== null && L.suaraMasuk > M.masuk ? L.suaraMasuk - M.masuk : 0;
@@ -302,8 +303,17 @@
     if (st && st.status === 'Dibuka' && st.selesai && st.selesai > now) { box.classList.remove('hidden'); $('#m-timer-lbl').textContent = 'Sisa waktu'; $('#m-timer-val').textContent = fmt.durasi(st.selesai - now); }
     else if (st && st.status === 'Persiapan' && st.mulai && st.otomatis && st.mulai > now) { box.classList.remove('hidden'); $('#m-timer-lbl').textContent = 'Dibuka dalam'; $('#m-timer-val').textContent = fmt.durasi(st.mulai - now); }
     else box.classList.add('hidden');
-    const upd = $('#s-upd');
-    if (upd) { const d = Math.round((Date.now() - M.update) / 1000); upd.textContent = d < 5 ? 'baru saja' : d + ' detik lalu'; }
+    const upd = $('#s-upd'), lbl = $('#s-upd-lbl'), tay = M.meta && M.meta.tayang;
+    if (upd && tay && !(st && st.status === 'Ditutup')) {
+      // hasil ditayangkan berkala (jeda kerahasiaan): tampilkan hitung mundur ke pembaruan berikutnya
+      lbl.textContent = 'Hasil berikutnya';
+      const sisa = M.tayangPada - Date.now();
+      if (sisa > 0) { const d = Math.ceil(sisa / 1000); upd.innerHTML = String(Math.floor(d / 60)).padStart(2, '0') + ':' + String(d % 60).padStart(2, '0') + '<small>tiap ' + tay.menit + ' mnt</small>'; }
+      else upd.textContent = sisa > -((M.meta.interval || 5) + 5) * 1000 ? 'memperbarui…' : 'menunggu suara baru';
+    } else if (upd) {
+      lbl.textContent = 'Pembaruan';
+      const d = Math.round((Date.now() - M.update) / 1000); upd.textContent = d < 5 ? 'baru saja' : d + ' detik lalu';
+    }
     if (M.live && M.meta && !M.meta.sembunyikan && (M.meta.tataLetak === 'bergantian') && M.live.pemilihan.length > 1 && !(st && st.status === 'Ditutup')) {
       const sisa = 15 - Math.floor((Date.now() - M.rotAt) / 1000);
       const t = $('#rot-teks'); if (t) t.textContent = 'Berganti ke ' + M.live.pemilihan[(M.rot + 1) % M.live.pemilihan.length].nama + ' dalam ' + Math.max(0, sisa) + ' dtk';

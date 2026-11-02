@@ -363,11 +363,22 @@
     const tutupAsli = m.close; m.close = v => { document.removeEventListener('keydown', ketik); tutupAsli(v); };
     return m;
   }
-  function keluarPerangkat(pin, mode) {
-    EV.api('device.pin', { pin, tujuan: 'keluar' }, { retry: 0 });
+  // Keluar mode perangkat → kembali ke DASBOR admin (sesi admin baru diterbitkan server setelah PIN benar).
+  // Bila pengaturan "Setelah keluar" = Login, atau server tak terjangkau, kembali ke halaman login.
+  async function keluarPerangkat(pin, mode) {
+    const nama = mode === 'monitor' ? 'monitor' : 'bilik';
+    const tunggu = toast('Mengakhiri mode ' + nama + '…', 'info');
+    const r = await EV.api('device.pin', { pin, tujuan: 'keluar' }, { retry: 1 });
+    if (tunggu && tunggu.remove) tunggu.remove();
     EV.Sesi.clearPerangkat();
     try { if (document.fullscreenElement) document.exitFullscreen(); } catch (e) { /* abaikan */ }
-    toast(mode === 'monitor' ? 'Mode monitor diakhiri.' : 'Mode bilik diakhiri. Masuk sebagai admin untuk memulai ulang.', 'info');
+    const admin = r.success && r.data && r.data.admin;
+    if (admin && admin.token) {
+      EV.Sesi.set({ token: admin.token, me: admin.me });
+      toast('Mode ' + nama + ' diakhiri. Selamat datang kembali, ' + admin.me.nama + '.', 'ok');
+      return EV.app.pergi(admin.me.wajibGantiSandi ? 'ganti-sandi' : 'admin/dasbor');
+    }
+    toast('Mode ' + nama + ' diakhiri. Masuk sebagai admin untuk melanjutkan.', 'info');
     EV.app.pergi('login');
   }
   function menuPetugas() {

@@ -774,7 +774,7 @@
           <div class="row" style="color:${s.tema_monitor === 'terang' ? 'var(--c-primary)' : '#fff'}"><div class="brand-logo" style="width:30px;height:30px;border-radius:10px">${lg}</div><b style="font-family:var(--f-head);font-size:13px">${esc(cfg.nama_aplikasi)}</b><span class="pill pill-live" style="margin-left:auto;height:22px;font-size:10px"><span class="dot dot-pulse"></span>LIVE</span></div>
           <div class="prev-mon" style="box-shadow:inset 0 0 0 2px var(--gold)"><span class="pm-no" style="color:var(--gold)">01</span>${foto('', 42)}<div><div class="pm-name">Calon Unggul</div><div class="pm-sub">XI MIPA 2</div></div><span class="pm-val" style="color:var(--gold)">168</span></div>
           <div class="prev-mon"><span class="pm-no">02</span>${foto('', 42)}<div><div class="pm-name">Calon Lain</div><div class="pm-sub">XI IPS 1</div></div><span class="pm-val">96</span></div>
-          <div class="xs" style="color:${s.tema_monitor === 'terang' ? 'var(--muted)' : 'rgba(255,255,255,.75)'}">${s.tata_letak_monitor === 'bergantian' ? 'Bergantian' : 'Berdampingan'} • diperbarui tiap ${s.interval_monitor_detik} detik${s.sembunyikan_angka_sampai_tutup === 'ya' ? ' • angka disembunyikan' : ''}</div></div>`
+          <div class="xs" style="color:${s.tema_monitor === 'terang' ? 'var(--muted)' : 'rgba(255,255,255,.75)'}">${s.tata_letak_monitor === 'bergantian' ? 'Bergantian' : 'Berdampingan'} • ${s.jeda_monitor_menit !== '0' ? 'hasil tayang tiap ' + s.jeda_monitor_menit + ' menit' : 'diperbarui tiap ' + s.interval_monitor_detik + ' detik'}${s.sembunyikan_angka_sampai_tutup === 'ya' ? ' • angka disembunyikan' : ''}</div></div>`
       };
       $('#prev-isi', page).innerHTML = isi[tabPrev];
       const ku = EV.ui.kontras(s.warna_utama, '#FFFFFF'), ka = EV.ui.kontras(s.warna_aksen, '#FFFFFF');
@@ -802,12 +802,15 @@
           <div class="form-section"><h3>${ic('tv')}Tampilan Monitor</h3>
             <div class="form-grid"><div class="field"><span class="label">Tema</span>${seg('tema_monitor', [['gelap', ic('bulan') + 'Gelap'], ['terang', ic('matahari') + 'Terang']])}<span class="help">Gelap lebih kontras di proyektor.</span></div>
               <div class="field"><span class="label">Tata Letak</span>${seg('tata_letak_monitor', [['berdampingan', 'Berdampingan'], ['bergantian', 'Bergantian']])}</div>
-              <div class="field"><label for="s-interval">Interval Pembaruan</label><select class="select" id="s-interval" data-k="interval_monitor_detik">${['5', '30', '60'].map(v => `<option value="${v}" ${s.interval_monitor_detik === v ? 'selected' : ''}>${v} detik</option>`).join('')}</select><span class="help">30–60 detik menjaga kerahasiaan bila bilik sedikit.</span></div>
+              <div class="field"><label for="s-interval">Interval Pembaruan</label><select class="select" id="s-interval" data-k="interval_monitor_detik">${['5', '30', '60'].map(v => `<option value="${v}" ${s.interval_monitor_detik === v ? 'selected' : ''}>${v} detik</option>`).join('')}</select><span class="help">Seberapa sering monitor mengecek status (buka, jeda, tutup).</span></div>
               <div class="field"><span class="label">Angka Hasil</span><label class="switch" style="margin-top:8px"><input type="checkbox" id="s-sembunyi" ${s.sembunyikan_angka_sampai_tutup === 'ya' ? 'checked' : ''}><span class="track"></span>Sembunyikan sampai ditutup</label></div>
+              <div class="field"><label for="s-jeda">Jeda Tayang Hasil</label><select class="select" id="s-jeda" data-k="jeda_monitor_menit">${[['0', 'Langsung (tanpa jeda)'], ['1', '1 menit'], ['2', '2 menit'], ['3', '3 menit'], ['5', '5 menit'], ['10', '10 menit']].map(v => `<option value="${v[0]}" ${s.jeda_monitor_menit === v[0] ? 'selected' : ''}>${v[1]}</option>`).join('')}</select><span class="help">Selama pemungutan, angka di monitor hanya berubah tiap jeda ini — pilihan orang yang baru keluar bilik tidak bisa ditebak. Admin tetap melihat angka terkini.</span></div>
+              <div class="field"><label for="s-minsuara">Minimal Suara Baru per Pembaruan</label><select class="select" id="s-minsuara" data-k="jeda_monitor_min_suara">${['1', '2', '3', '5', '10'].map(v => `<option value="${v}" ${s.jeda_monitor_min_suara === v ? 'selected' : ''}>${v} suara</option>`).join('')}</select><span class="help">Monitor menunggu sampai suara baru terkumpul sebanyak ini, jadi satu suara tidak pernah tampil sendirian.</span></div>
               <div class="full">${field('teks_berjalan_monitor', 'Teks Berjalan', 200, 'area')}</div></div></div>
           <div class="form-section"><h3>${ic('vote')}Bilik Suara</h3>
             <div class="form-grid"><div class="field"><span class="label">Bunyi</span><label class="switch" style="margin-top:8px"><input type="checkbox" id="s-bip" ${s.bunyi_bip_bilik === 'ya' ? 'checked' : ''}><span class="track"></span>Bunyi bip saat kartu dipindai</label></div>
-              <div class="field"><label for="s-idle">Batas Diam (detik)</label><input class="input" type="number" min="30" max="180" id="s-idle" data-k="batas_idle_bilik_detik" value="${esc(s.batas_idle_bilik_detik)}"><span class="help">Sesi memilih dibatalkan bila tidak ada sentuhan.</span></div></div>
+              <div class="field"><label for="s-idle">Batas Diam (detik)</label><input class="input" type="number" min="30" max="180" id="s-idle" data-k="batas_idle_bilik_detik" value="${esc(s.batas_idle_bilik_detik)}"><span class="help">Sesi memilih dibatalkan bila tidak ada sentuhan.</span></div>
+              <div class="field full"><span class="label">Setelah Keluar Mode Bilik / Monitor</span>${seg('keluar_perangkat', [['dasbor', ic('dasbor') + 'Kembali ke Dasbor'], ['login', ic('kunci') + 'Ke Halaman Login']])}<span class="help">Keluar selalu memerlukan PIN petugas. Pilih <b>Ke Halaman Login</b> bila PIN juga dipegang petugas yang bukan admin.</span></div></div>
             <div class="card card-tint" style="padding:16px"><div class="row between wrap"><div><div class="bold">${ic('kunci', 'ic-sm')} PIN Petugas</div><div class="small muted">${pinAda ? 'PIN sudah diatur. Isi di bawah untuk menggantinya.' : 'PIN belum diatur — wajib sebelum Mode Bilik.'}</div></div></div>
               <div class="row wrap" style="margin-top:12px"><input class="input" type="password" id="pin" inputmode="numeric" maxlength="6" autocomplete="off" placeholder="6 digit baru" style="max-width:200px" aria-label="PIN petugas baru"><button class="btn btn-outline" id="simpan-pin" data-loading="Menyimpan…">${ic('cek')}Simpan PIN</button></div></div></div>
           <div class="sticky-bar"><button class="btn btn-ghost" id="bawaan">${ic('ulang')}Kembalikan ke Bawaan</button><button class="btn btn-lg" id="simpan" data-loading="Menyimpan…">${ic('cek')}Simpan Perubahan</button></div>
@@ -859,7 +862,7 @@
       sibuk(e.currentTarget, async () => { const x = await EV.api('settings.pin', { pin }); if (EV.ui.hasil(x)) { $('#pin', page).value = ''; pinAda = true; } });
     });
     $('#bawaan', page).addEventListener('click', () => {
-      Object.assign(s, { warna_utama: '#1E1B5E', warna_aksen: '#6366E8', tema_monitor: 'gelap', tata_letak_monitor: 'berdampingan', interval_monitor_detik: '5', sembunyikan_angka_sampai_tutup: 'tidak', bunyi_bip_bilik: 'ya', batas_idle_bilik_detik: '60' });
+      Object.assign(s, { warna_utama: '#1E1B5E', warna_aksen: '#6366E8', tema_monitor: 'gelap', tata_letak_monitor: 'berdampingan', interval_monitor_detik: '5', sembunyikan_angka_sampai_tutup: 'tidak', bunyi_bip_bilik: 'ya', batas_idle_bilik_detik: '60', jeda_monitor_menit: '3', jeda_monitor_min_suara: '3', keluar_perangkat: 'dasbor' });
       toast('Nilai bawaan dimuat. Klik "Simpan Perubahan" untuk menyimpan.', 'info');
       pengaturanIsiUlang();
     });
@@ -867,6 +870,7 @@
       ['warna_utama', 'warna_aksen'].forEach(k => { $('#s-' + k, page).value = s[k]; });
       $('#c-utama', page).value = s.warna_utama; $('#c-aksen', page).value = s.warna_aksen;
       $('#s-interval', page).value = s.interval_monitor_detik; $('#s-idle', page).value = s.batas_idle_bilik_detik;
+      $('#s-jeda', page).value = s.jeda_monitor_menit; $('#s-minsuara', page).value = s.jeda_monitor_min_suara;
       $('#s-sembunyi', page).checked = s.sembunyikan_angka_sampai_tutup === 'ya'; $('#s-bip', page).checked = s.bunyi_bip_bilik === 'ya';
       $$('[data-seg]', page).forEach(g => $$('button', g).forEach(x => x.classList.toggle('on', x.dataset.v === s[g.dataset.seg])));
       pratinjau();
