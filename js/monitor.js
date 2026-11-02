@@ -36,7 +36,10 @@
     $('#m-exit').addEventListener('click', menuPetugas);
     const onKey = e => { if (e.key === 'Escape' && !document.querySelector('.modal-root')) menuPetugas(); };
     document.addEventListener('keydown', onKey);
-    EV.app.onCleanup(() => { document.removeEventListener('keydown', onKey); clearTimeout(M.timer); });
+    let tPas = 0;
+    const onUkur = () => { clearTimeout(tPas); tPas = setTimeout(pasPemenang, 150); };
+    window.addEventListener('resize', onUkur);
+    EV.app.onCleanup(() => { document.removeEventListener('keydown', onKey); window.removeEventListener('resize', onUkur); clearTimeout(M.timer); clearTimeout(tPas); });
     EV.app.setiap(tikDetik, 1000);
     if (M.live) gambarSemua(true);
     tarik();
@@ -224,6 +227,18 @@
     mb.appendChild(tengah);
   }
 
+  // kartu pemenang dikecilkan proporsional bila calonnya banyak / layar pendek, agar tidak tertutup teks berjalan
+  function pasPemenang() {
+    const g = document.querySelector('.win-grid');
+    if (!g) return;
+    const kartu = Array.from(g.children);
+    kartu.forEach(k => { k.style.zoom = ''; });
+    const tk = document.querySelector('.mon-ticker');
+    const batas = tk ? tk.getBoundingClientRect().top : window.innerHeight;
+    const perlu = Math.max(0, ...kartu.map(k => k.offsetHeight)), ada = batas - g.getBoundingClientRect().top - Math.round(window.innerHeight * 0.015);
+    if (perlu > ada && ada > 0) { const r = Math.max(0.5, ada / perlu).toFixed(3); kartu.forEach(k => { k.style.zoom = r; }); }
+  }
+
   function layarPemenang() {
     const L = M.live, mb = $('#mb');
     const kunci = 'menang|' + L.versi;
@@ -255,6 +270,7 @@
         <h1>SELAMAT KEPADA <em>${L.pemilihan.length > 1 ? 'KETUA TERPILIH' : esc(L.pemilihan[0].nama.toUpperCase()) + ' TERPILIH'}</em>!</h1>
         <div class="win-sub">${esc(M.meta.judul)} · Partisipasi ${fmt.angka(L.suaraMasuk)} dari ${fmt.angka(L.totalPemilih)} pemilih (${fmt.persen(L.partisipasi)})</div>
         <div class="win-grid">${L.pemilihan.map(kartu).join('')}</div></div>`;
+      requestAnimationFrame(pasPemenang);
       if (L.pemilihan.some(p => p.unggul)) EV.ui.konfeti(6000);
     };
     const kunciSesi = 'evs_menang_' + L.versi;

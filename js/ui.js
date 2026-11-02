@@ -194,7 +194,7 @@
       try { img = await muatGambar(await bacaFile(file)); } catch (e) { toast(e.message, 'bad'); return resolve(null); }
       let hasilData = null;
       const m = modal({
-        title: 'Atur Foto', sub: 'Geser foto dan atur zoom agar wajah berada di tengah lingkaran.',
+        title: 'Atur Foto', sub: 'Geser foto dan atur zoom agar wajah berada di tengah bingkai (gaya pas foto).',
         body: `<div class="crop" id="crop"><canvas width="560" height="560"></canvas><div class="c-ring"></div></div>
           <div class="row" style="margin-top:16px">${ic('minus', 'muted')}<input type="range" id="zoom" min="1" max="3" step="0.01" value="1" aria-label="Zoom">${ic('plus', 'muted')}</div>`,
         foot: `<button class="btn btn-ghost" data-close>Batal</button><button class="btn" data-ok>${ic('cek')}Gunakan Foto</button>`,
