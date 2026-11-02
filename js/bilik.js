@@ -25,7 +25,7 @@
 
   function render() {
     const dev = EV.Sesi.perangkat();
-    Object.assign(S, { dev, ballot: dev.ballot || null, status: null, bip: true, idle: 60, layar: 'siaga', pemilih: null, sesi: null, langkah: 0, pilihan: {}, buffer: '', bufAt: 0, idleAt: 0, sibuk: false, conn: 'ok', kamera: null });
+    Object.assign(S, { dev, ballot: dev.ballot || null, status: null, bip: true, idle: 60, layar: 'siaga', pemilih: null, sesi: null, langkah: 0, pilihan: {}, buffer: '', bufAt: 0, idleAt: 0, sibuk: false, conn: 'ok', scan: null, abaikan: {}, kodeAktif: '', kamStatus: '', kamGalat: null, tIzin: 0 });
     const cfg = EV.state.cfg;
     document.body.className = '';
     $('#app').innerHTML = `
@@ -34,7 +34,7 @@
         <header class="booth-top">${EV.app.logoHtml('brand-logo blob')}<div class="brand-text"><b>${esc(cfg.nama_aplikasi)}</b><span>${esc(cfg.judul_acara)}</span></div>
           <span class="spacer"></span><span id="b-status"></span></header>
         <main class="booth-body" id="bb" aria-live="polite"></main>
-        <footer class="booth-foot">${ic('vote')}<b>${esc(dev.nama)}</b><span class="conn ok" id="b-conn"><span class="dot"></span>Terhubung</span><span class="hide-sm">${ic('perisai', 'ic-sm')} Pilihan Anda rahasia — tidak ada yang bisa melihatnya.</span>
+        <footer class="booth-foot">${ic('vote')}<b>${esc(dev.nama)}</b><span class="conn ok" id="b-conn"><span class="dot"></span>Terhubung</span><span class="cam-chip hidden" id="b-cam"></span><span class="hide-sm">${ic('perisai', 'ic-sm')} Pilihan Anda rahasia — tidak ada yang bisa melihatnya.</span>
           <button class="lock-btn" id="b-kunci" aria-label="Menu petugas (PIN)">${ic('gembok')}</button></footer>
       </div>`;
     $('#b-kunci').addEventListener('click', menuPetugas);
@@ -50,7 +50,8 @@
       document.removeEventListener('keydown', onKey);
       ['pointerdown', 'touchstart', 'keydown'].forEach(ev => document.removeEventListener(ev, onAkt));
       document.removeEventListener('contextmenu', blokMenu);
-      matikanKamera();
+      if (S.scan) { S.scan.berhenti(); S.scan = null; }
+      clearTimeout(S.tIzin);
     });
     EV.app.setiap(cekStatus, 20000);
     EV.app.setiap(tikIdle, 250);
@@ -66,7 +67,7 @@
     S.status = r.data.status; S.bip = r.data.bip; S.idle = r.data.idle || 60;
     $('#b-status').innerHTML = S.status.simulasi ? `<span class="pill pill-warn pill-lg">${ic('tabung')}Mode Simulasi</span>` : EV.ui.pillStatus(S.status.status, true);
     if ((awal === true || (S.ballot && S.ballot.versi !== r.data.ballotVer)) && S.layar === 'siaga') muatBallot();
-    if (S.layar === 'siaga') siaga();
+    if (S.layar === 'siaga') perbaruiInfoSiaga();
   }
   async function muatBallot() {
     const r = await EV.api('ballot', {}, { retry: 1 });
@@ -79,13 +80,14 @@
     el.innerHTML = '<span class="dot"></span>' + (k === 'ok' ? 'Terhubung' : k === 'warn' ? 'Menghubungkan…' : 'Terputus');
   }
 
-  // ------------------------------------------------------------------ input pemindai (scanner USB bekerja seperti keyboard)
+  // ------------------------------------------------------------------ input pemindai
+  // Scanner USB/Bluetooth bekerja seperti keyboard — tetap aktif sebagai cadangan meski memakai kamera.
   function tombol(e) {
     if (document.querySelector('.modal-root')) return;
     if (S.layar !== 'siaga' || S.sibuk) return;
     if (e.key === 'Enter') {
       const kode = S.buffer; S.buffer = '';
-      if (kode.replace(/[^A-Za-z0-9]/g, '').length >= 6) validasi(kode);
+      if (kode.replace(/[^A-Za-z0-9]/g, '').length >= 6) validasi(kode, true);
       return;
     }
     if (e.key.length === 1 && /[A-Za-z0-9-]/.test(e.key)) {
@@ -93,45 +95,98 @@
       S.buffer += e.key; S.bufAt = Date.now();
     }
   }
+  const normKode = t => String(t || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  // jeda per kartu: kartu yang masih dipegang di depan kamera tidak terbaca berulang kali
+  function abaikan(kode, ms) { if (kode) S.abaikan[kode] = Math.max(S.abaikan[kode] || 0, Date.now() + ms); }
+  function bolehBaca(kode) { const t = S.abaikan[kode]; return !t || Date.now() > t; }
 
-  // ------------------------------------------------------------------ layar: siaga
-  function siaga() {
-    S.layar = 'siaga'; S.pemilih = null; S.sesi = null; S.pilihan = {}; S.langkah = 0; S.sibuk = false;
-    const st = S.status ? S.status.status : null;
-    const pakaiKamera = S.dev.pemindai === 'kamera';
-    $('#bb').innerHTML = `<div class="idle">
-      <div>
-        ${pakaiKamera ? `<div class="cam-box" id="cam"><div class="scan-corners" style="inset:18px;position:absolute;z-index:2"></div><div class="scan-beam" style="z-index:2"></div></div>`
-          : `<div class="scan-ilus"><div class="scan-card"><div class="sc-head"></div><div class="sc-l1"></div><div class="sc-l2"></div><div class="sc-qr"></div></div><div class="scan-corners"></div><div class="scan-beam"></div></div>`}
-        <h1>Pindai Kartu Suara Anda</h1>
-        <p>${pakaiKamera ? 'Tunjukkan QR code pada kartu ke kamera di atas layar' : 'Arahkan barcode pada kartu ke alat pemindai'}</p>
-        ${st && st !== 'Dibuka' && !(S.status && S.status.simulasi) ? `<div class="alert alert-warn" style="margin:22px auto 0;max-width:560px;font-size:16px">${ic('info')}<div>Status pemungutan: <b>${esc(st)}</b>. Kartu belum bisa dipakai sampai pemungutan dibuka.</div></div>` : ''}
-        ${pakaiKamera ? '' : `<div class="hint-down">${ic('bawahPanah', 'ic-xl')}</div>`}
-        <div id="cek-kartu" style="margin-top:16px;min-height:28px"></div>
-      </div></div>`;
-    if (pakaiKamera) nyalakanKamera();
+  // ------------------------------------------------------------------ kamera
+  const pakaiKamera = () => (S.dev.pemindai || 'kamera') === 'kamera';
+  function pemindai() {
+    if (!S.scan) {
+      S.scan = EV.Pemindai.buat({
+        kameraId: S.dev.kameraId || '', hadap: S.dev.kameraHadap || 'user', cermin: S.dev.cermin === undefined ? 'auto' : S.dev.cermin,
+        onKode: kodeDariKamera, onStatus: statusKamera
+      });
+    }
+    return S.scan;
   }
-
-  async function nyalakanKamera() {
-    try {
-      const Html5Qrcode = await EV.ui.LIB.kamera();
-      const box = $('#cam'); if (!box || S.layar !== 'siaga') return;
-      if (!S.kamera) {
-        const v = document.createElement('div'); v.id = 'cam-view'; v.style.cssText = 'width:100%;height:100%'; box.appendChild(v);
-        S.kamera = new Html5Qrcode('cam-view', { verbose: false });
-        await S.kamera.start({ facingMode: 'user' }, { fps: 10, qrbox: 220 }, teks => { if (S.layar === 'siaga' && !S.sibuk) validasi(teks); }, () => {});
-      } else if (S.kamera.getState && S.kamera.getState() === 3) S.kamera.resume();
-    } catch (e) {
-      const el = $('#cek-kartu'); if (el) el.innerHTML = `<div class="alert alert-warn" style="max-width:560px;margin:0 auto">${ic('kamera')}<div>Kamera tidak dapat dipakai (${esc(e.message || e)}). Gunakan scanner USB atau input kode manual oleh petugas.</div></div>`;
+  function kodeDariKamera(teks) {
+    if (S.layar !== 'siaga' || S.sibuk || document.querySelector('.modal-root')) return;
+    const kode = normKode(teks);
+    if (kode.length !== 8) return;          // bukan QR kartu suara → abaikan diam-diam (tidak dihitung kartu salah)
+    if (!bolehBaca(kode)) return;
+    const box = $('#cam-slot');
+    if (box) { box.classList.remove('hit'); void box.offsetWidth; box.classList.add('hit'); }
+    validasi(kode);
+  }
+  function nyalakanKamera() {
+    const sc = pemindai();
+    sc.pasang($('#cam-slot'));
+    sc.aktif(true);
+    if (sc.siap()) return statusKamera('siap', sc.info());
+    clearTimeout(S.tIzin);
+    S.tIzin = setTimeout(() => { if (S.kamStatus === 'memulai' && S.layar === 'siaga') tampilKamera('izin'); }, 4500);
+    sc.mulai().catch(() => { /* ditampilkan lewat statusKamera */ });
+  }
+  function statusKamera(st, x) {
+    S.kamStatus = st;
+    if (st === 'galat') S.kamGalat = x;
+    const chip = $('#b-cam');
+    if (chip) {
+      chip.classList.remove('hidden');
+      chip.className = 'cam-chip ' + (st === 'siap' ? 'ok' : st === 'galat' ? 'bad' : 'warn');
+      chip.innerHTML = ic('kamera', 'ic-sm') + (st === 'siap' ? 'Kamera siap' : st === 'galat' ? 'Kamera mati' : 'Membuka kamera…');
+    }
+    if (st === 'putus') setTimeout(() => { if (S.layar === 'siaga' && S.scan && !S.scan.hidup()) nyalakanKamera(); }, 2000);
+    if (S.layar === 'siaga') tampilKamera(st, x);
+  }
+  function tampilKamera(st, x) {
+    const el = $('#cam-msg'), box = $('#cam-slot');
+    if (!el || !box) return;
+    box.classList.toggle('siap', st === 'siap');
+    if (st === 'siap') { el.hidden = true; el.innerHTML = ''; return; }
+    el.hidden = false;
+    if (st === 'memulai' || st === 'izin' || st === 'putus') {
+      el.innerHTML = `<span class="spin"></span><b>${st === 'putus' ? 'Menyambungkan ulang kamera…' : 'Membuka kamera…'}</b>${st === 'izin' ? '<small>Jika muncul pertanyaan izin kamera, pilih <b>Izinkan</b>.</small>' : ''}`;
+    } else {
+      el.innerHTML = `<span class="cm-ic">${ic('kamera', 'ic-lg')}</span><b>Kamera belum bisa dibuka</b><small>${esc(x && x.message ? x.message : '')}</small>
+        <button class="btn" id="cam-ulang">${ic('segarkan')}Coba Lagi</button>`;
+      $('#cam-ulang', el).addEventListener('click', e => { e.stopPropagation(); nyalakanKamera(); });
     }
   }
-  function jedaKamera() { try { if (S.kamera && S.kamera.getState && S.kamera.getState() === 2) S.kamera.pause(true); } catch (e) { /* abaikan */ } }
-  function matikanKamera() { try { if (S.kamera) { S.kamera.stop().catch(() => {}); S.kamera = null; } } catch (e) { S.kamera = null; } }
 
-  async function validasi(kode) {
+  // ------------------------------------------------------------------ layar: siaga
+  function infoSiaga() {
+    const st = S.status ? S.status.status : null;
+    return st && st !== 'Dibuka' && !(S.status && S.status.simulasi)
+      ? `<div class="alert alert-warn siaga-alert">${ic('info')}<div>Status pemungutan: <b>${esc(st)}</b>. Kartu belum bisa dipakai sampai pemungutan dibuka.</div></div>` : '';
+  }
+  function perbaruiInfoSiaga() { const el = $('#siaga-info'); if (el) el.innerHTML = infoSiaga(); }
+  function siaga() {
+    S.layar = 'siaga'; S.pemilih = null; S.sesi = null; S.pilihan = {}; S.langkah = 0; S.sibuk = false; S.kodeAktif = '';
+    const kamera = pakaiKamera();
+    $('#bb').innerHTML = `<div class="idle ${kamera ? 'idle-kamera' : ''}">
+      <div class="idle-in">
+        ${kamera ? `<div class="cam-box" id="cam-slot"><div class="cam-frame" aria-hidden="true"><i></i><i></i><i></i><i></i></div><div class="scan-beam" aria-hidden="true"></div><div class="cam-msg" id="cam-msg" hidden></div></div>`
+          : `<div class="scan-ilus"><div class="scan-card"><div class="sc-head"></div><div class="sc-l1"></div><div class="sc-l2"></div><div class="sc-qr"></div></div><div class="scan-corners"></div><div class="scan-beam"></div></div>`}
+        <h1>Pindai Kartu Suara Anda</h1>
+        <p>${kamera ? 'Hadapkan <b>QR code</b> pada kartu ke kamera, tepat di dalam kotak' : 'Arahkan barcode pada kartu ke alat pemindai'}</p>
+        <div id="siaga-info">${infoSiaga()}</div>
+        ${kamera ? '' : `<div class="hint-down">${ic('bawahPanah', 'ic-xl')}</div>`}
+        <div id="cek-kartu" class="cek-kartu"></div>
+      </div></div>`;
+    if (kamera) nyalakanKamera();
+    else if (S.scan) { S.scan.berhenti(); S.scan = null; }
+  }
+
+  async function validasi(kode, manual) {
     if (S.sibuk) return;
-    S.sibuk = true;
-    jedaKamera();
+    kode = normKode(kode);
+    if (!manual && !bolehBaca(kode)) return;
+    S.sibuk = true; S.kodeAktif = kode;
+    abaikan(kode, 4000);
+    if (S.scan) S.scan.aktif(false);       // berhenti membaca selama kartu diperiksa & pemilih memilih
     const el = $('#cek-kartu');
     if (el) el.innerHTML = `<span class="pill pill-info pill-lg"><span class="spin" style="width:16px;height:16px;border:2.5px solid currentColor;border-right-color:transparent;border-radius:50%;animation:spin .7s linear infinite"></span>Memeriksa kartu…</span>`;
     const r = await EV.api('bilik.validate', { kode }, { retry: 1 });
@@ -139,6 +194,7 @@
     if (!r.success) {
       if (r.code === 'NETWORK') setConn('bad');
       if (S.bip) bunyi('gagal');
+      abaikan(kode, r.code === 'NETWORK' ? 3000 : 14000);
       return kendala(r.code, r.message);
     }
     setConn('ok');
@@ -203,7 +259,7 @@
   }
   async function batalkan() {
     const ok = await EV.ui.konfirmasi({ title: 'Batalkan pemilihan?', message: 'Suara belum dikirim. Kartu Anda tetap bisa dipakai untuk memilih nanti.', ok: 'Ya, Batalkan', batal: 'Lanjut Memilih', icon: false });
-    if (ok) siaga();
+    if (ok) { abaikan(S.kodeAktif, 6000); siaga(); }
   }
 
   // ------------------------------------------------------------------ layar: konfirmasi
@@ -237,6 +293,7 @@
 
   // ------------------------------------------------------------------ layar: selesai & kendala
   function selesai() {
+    abaikan(S.kodeAktif, 25000);            // kartu yang baru dipakai tidak memicu "Sudah Digunakan" bila masih di depan kamera
     S.layar = 'selesai'; S.pemilih = null; S.sesi = null; S.pilihan = {};
     if (S.bip) bunyi('sukses');
     $('#bb').innerHTML = `<div class="layar-selesai"><div>
@@ -319,6 +376,7 @@
         title: 'Menu Petugas', sub: S.dev.nama,
         body: `<div class="stack" style="gap:12px">
           <button class="btn btn-outline btn-lg btn-block" id="mp-manual">${ic('keyboard')}Input Kode Manual</button>
+          <button class="btn btn-outline btn-lg btn-block" id="mp-scan">${ic('kamera')}Pengaturan Pemindai</button>
           <button class="btn btn-outline btn-lg btn-block" id="mp-muat">${ic('segarkan')}Muat Ulang Data Calon</button>
           <button class="btn btn-danger-soft btn-lg btn-block" id="mp-keluar">${ic('keluar')}Keluar Mode Bilik</button></div>`,
         foot: `<button class="btn btn-ghost" data-close>Tutup</button>`
@@ -330,12 +388,63 @@
           body: `<input class="input mono" id="km" maxlength="9" autocomplete="off" autocapitalize="characters" spellcheck="false" style="height:64px;font-size:28px;text-align:center;letter-spacing:.2em;text-transform:uppercase" placeholder="K7QX M3PA" aria-label="Kode kartu">`,
           foot: `<button class="btn btn-ghost" data-close>Batal</button><button class="btn btn-lg" id="km-ok">${ic('panahKanan')}Proses</button>`
         });
-        const proses = () => { const v = $('#km', k.el).value.replace(/[^A-Za-z0-9]/g, ''); if (v.length !== 8) return toast('Kode kartu harus 8 karakter.', 'warn'); k.close(); if (S.layar !== 'siaga') siaga(); validasi(v); };
+        const proses = () => { const v = $('#km', k.el).value.replace(/[^A-Za-z0-9]/g, ''); if (v.length !== 8) return toast('Kode kartu harus 8 karakter.', 'warn'); k.close(); if (S.layar !== 'siaga') siaga(); validasi(v, true); };
         $('#km-ok', k.el).addEventListener('click', proses);
         $('#km', k.el).addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') proses(); });
       });
+      $('#mp-scan', m.el).addEventListener('click', () => { m.close(); pengaturanPemindai(); });
       $('#mp-muat', m.el).addEventListener('click', async e => { await EV.ui.sibuk(e.currentTarget, muatBallot); toast('Data calon dimuat ulang.', 'ok'); m.close(); });
       $('#mp-keluar', m.el).addEventListener('click', () => { m.close(); keluarPerangkat(pin, 'bilik'); });
+    });
+  }
+
+  // ------------------------------------------------------------------ pengaturan pemindai (petugas)
+  async function pengaturanPemindai() {
+    let mode = pakaiKamera() ? 'kamera' : 'usb';
+    let cermin = S.dev.cermin === undefined ? 'auto' : S.dev.cermin;
+    const sc = mode === 'kamera' ? pemindai() : null;
+    const kam = sc ? await sc.daftarKamera() : [];
+    const inf = sc ? sc.info() : null;
+    const pilihNow = S.dev.kameraId ? 'id:' + S.dev.kameraId : 'hadap:' + (S.dev.kameraHadap || 'user');
+    const m = modal({
+      title: 'Pengaturan Pemindai', sub: S.dev.nama, size: 'lg',
+      body: `<div class="stack" style="gap:16px">
+        <div class="field"><span class="label">Cara memindai kartu</span><div class="seg seg-penuh" id="ps-mode">
+          <button data-v="kamera">${ic('kamera')}Kamera</button><button data-v="usb">${ic('scan')}Scanner USB</button></div></div>
+        <div id="ps-kam" class="stack" style="gap:16px">
+          <div class="field"><label for="ps-pilih">Kamera</label><select class="input" id="ps-pilih">
+            <option value="hadap:user">Kamera depan (otomatis)</option>
+            <option value="hadap:environment">Kamera belakang (otomatis)</option>
+            ${kam.map(k => `<option value="id:${esc(k.id)}">${esc(k.label)}</option>`).join('')}
+          </select><span class="help">Laptop: pakai webcam bawaan. HP/tablet di dudukan: pakai kamera depan.</span></div>
+          <div class="field"><span class="label">Tampilan video</span><div class="seg seg-penuh" id="ps-cermin">
+            <button data-v="auto">Otomatis</button><button data-v="ya">Cermin</button><button data-v="tidak">Normal</button></div>
+            <span class="help">Cermin memudahkan pemilih mengarahkan kartu. Tidak memengaruhi pembacaan QR.</span></div>
+          ${inf ? `<div class="alert info-pemindai">${ic('info')}<div>Mesin baca: <b>${esc(inf.mesinLabel || '—')}</b>${inf.msBaca ? ` · ±${inf.msBaca} ms per bacaan` : ''}${inf.lebar ? ` · ${inf.lebar}×${inf.tinggi}` : ''}<br><span class="small muted">${esc(inf.label || 'Kamera belum aktif')}</span></div></div>` : ''}
+        </div></div>`,
+      foot: `<button class="btn btn-ghost" data-close>Batal</button><button class="btn btn-lg" id="ps-simpan">${ic('cek')}Simpan</button>`
+    });
+    const pilih = $('#ps-pilih', m.el);
+    if ([...pilih.options].some(o => o.value === pilihNow)) pilih.value = pilihNow;
+    const gambar = () => {
+      $$('#ps-mode [data-v]', m.el).forEach(b => b.classList.toggle('on', b.dataset.v === mode));
+      $$('#ps-cermin [data-v]', m.el).forEach(b => b.classList.toggle('on', b.dataset.v === (cermin === 'auto' ? 'auto' : cermin ? 'ya' : 'tidak')));
+      $('#ps-kam', m.el).hidden = mode !== 'kamera';
+    };
+    $$('#ps-mode [data-v]', m.el).forEach(b => b.addEventListener('click', () => { mode = b.dataset.v; gambar(); }));
+    $$('#ps-cermin [data-v]', m.el).forEach(b => b.addEventListener('click', () => { cermin = b.dataset.v === 'auto' ? 'auto' : b.dataset.v === 'ya'; gambar(); }));
+    gambar();
+    $('#ps-simpan', m.el).addEventListener('click', () => {
+      const v = pilih.value, dev = EV.Sesi.perangkat() || S.dev;
+      dev.pemindai = mode; dev.cermin = cermin;
+      dev.kameraId = v.indexOf('id:') === 0 ? v.slice(3) : '';
+      dev.kameraHadap = v.indexOf('hadap:') === 0 ? v.slice(6) : 'user';
+      EV.Sesi.setPerangkat(dev); S.dev = dev;
+      m.close();
+      if (mode === 'kamera' && S.scan) S.scan.atur({ kameraId: dev.kameraId, hadap: dev.kameraHadap, cermin }).catch(() => {});
+      if (mode !== 'kamera') { const chip = $('#b-cam'); if (chip) chip.className = 'cam-chip hidden'; }
+      toast('Pengaturan pemindai disimpan.', 'ok');
+      if (S.layar === 'siaga') siaga();
     });
   }
 

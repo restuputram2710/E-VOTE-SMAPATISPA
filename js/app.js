@@ -290,7 +290,7 @@
 
   // ------------------------------------------------------------------ MODE PERANGKAT
   function modalPerangkat(mode) {
-    let pilih = mode || 'bilik', pemindai = 'usb';
+    let pilih = mode || 'bilik', pemindai = 'kamera';
     const m = modal({
       title: 'Aktifkan Mode Perangkat',
       sub: 'Ubah perangkat ini menjadi bilik suara atau layar monitor hasil.',
@@ -300,21 +300,23 @@
       foot: `<button class="btn btn-ghost" data-close>Batal</button><button class="btn btn-lg" id="dev-mulai" data-loading="Memuat data calon…"></button>`
     });
     const isi = () => {
+      const lama = $('#dev-nama', m.el), namaLama = lama && lama.dataset.m === pilih ? lama.value : null;
       $$('.seg [data-m]', m.el).forEach(b => b.classList.toggle('on', b.dataset.m === pilih));
       $('#dev-mulai', m.el).innerHTML = ic('play') + (pilih === 'bilik' ? 'Mulai Mode Bilik' : 'Mulai Mode Monitor');
       $('#dev-isi', m.el).innerHTML = pilih === 'bilik' ? `
         <div class="form-grid">
-          <div class="field"><label for="dev-nama">Nama Bilik</label><input class="input" id="dev-nama" value="Bilik 1" maxlength="30"><span class="help">Tampil di layar bilik dan log aktivitas.</span></div>
-          <div class="field"><span class="label">Pemindai</span><div class="seg" id="dev-scan"><button data-s="usb" class="${pemindai === 'usb' ? 'on' : ''}">${ic('scan')}Scanner USB</button><button data-s="kamera" class="${pemindai === 'kamera' ? 'on' : ''}">${ic('kamera')}Kamera</button></div><span class="help">Scanner USB paling cepat dan stabil.</span></div>
+          <div class="field"><label for="dev-nama">Nama Bilik</label><input class="input" id="dev-nama" data-m="bilik" value="${esc(namaLama || 'Bilik 1')}" maxlength="30"><span class="help">Tampil di layar bilik dan log aktivitas.</span></div>
+          <div class="field"><span class="label">Pemindai</span><div class="seg" id="dev-scan"><button data-s="kamera" class="${pemindai === 'kamera' ? 'on' : ''}">${ic('kamera')}Kamera HP/Laptop</button><button data-s="usb" class="${pemindai === 'usb' ? 'on' : ''}">${ic('scan')}Scanner USB</button></div><span class="help">${pemindai === 'kamera' ? 'Tanpa alat tambahan — QR kartu dibaca kamera perangkat ini.' : 'Untuk alat scanner USB/Bluetooth yang bekerja seperti keyboard.'}</span></div>
         </div>
         <div class="alert" style="margin-top:18px">${ic('info')}<div>Data calon & foto dimuat sekarang agar surat suara tampil instan. <b>Sesi admin di perangkat ini akan ditutup</b>; keluar dari mode bilik memerlukan <b>PIN petugas</b>.</div></div>` : `
-        <div class="field"><label for="dev-nama">Nama Monitor</label><input class="input" id="dev-nama" value="Monitor Aula" maxlength="30"></div>
+        <div class="field"><label for="dev-nama">Nama Monitor</label><input class="input" id="dev-nama" data-m="monitor" value="${esc(namaLama || 'Monitor Aula')}" maxlength="30"></div>
         <div class="alert" style="margin-top:18px">${ic('info')}<div>Tampilan, tema, interval pembaruan, dan teks berjalan mengikuti menu <b>Pengaturan → Tampilan Monitor</b>. Sambungkan perangkat ke TV/proyektor lalu tekan F11 untuk layar penuh. Keluar memerlukan PIN petugas.</div></div>`;
       $$('#dev-scan [data-s]', m.el).forEach(b => b.addEventListener('click', () => { pemindai = b.dataset.s; isi(); }));
     };
     $$('.seg [data-m]', m.el).forEach(b => b.addEventListener('click', () => { pilih = b.dataset.m; isi(); }));
     isi();
     $('#dev-mulai', m.el).addEventListener('click', e => sibuk(e.currentTarget, async () => {
+      if (pilih === 'bilik' && pemindai === 'kamera' && EV.Pemindai) EV.Pemindai.siapkan(); // siapkan mesin baca QR sambil memuat data
       const nama = $('#dev-nama', m.el).value.trim() || (pilih === 'bilik' ? 'Bilik 1' : 'Monitor');
       const r = await EV.api('device.start', { mode: pilih, nama });
       if (!EV.ui.hasil(r, false)) return;

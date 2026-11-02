@@ -233,24 +233,30 @@
 
   // ------------------------------------------------------------------ pustaka eksternal (dimuat saat perlu)
   const pustaka = {};
+  // url boleh berupa daftar cadangan: dicoba berurutan sampai ada yang berhasil (CDN sekolah kadang diblokir)
   function muatSkrip(url, cekGlobal) {
     if (cekGlobal && window[cekGlobal]) return Promise.resolve(window[cekGlobal]);
-    if (pustaka[url]) return pustaka[url];
-    pustaka[url] = new Promise((res, rej) => {
-      const s = document.createElement('script'); s.src = url; s.async = true;
-      s.onload = () => res(cekGlobal ? window[cekGlobal] : true);
-      s.onerror = () => { delete pustaka[url]; rej(new Error('Gagal memuat pustaka. Periksa koneksi internet.')); };
+    const daftar = [].concat(url), kunci = daftar.join('|');
+    if (pustaka[kunci]) return pustaka[kunci];
+    const satu = u => new Promise((res, rej) => {
+      const s = document.createElement('script'); s.src = u; s.async = true;
+      s.onload = () => (cekGlobal && !window[cekGlobal]) ? rej(new Error('kosong')) : res(cekGlobal ? window[cekGlobal] : true);
+      s.onerror = () => { s.remove(); rej(new Error('gagal')); };
       document.head.appendChild(s);
     });
-    return pustaka[url];
+    pustaka[kunci] = daftar.reduce((p, u) => p.catch(() => satu(u)), Promise.reject(new Error('mulai')))
+      .catch(() => { delete pustaka[kunci]; throw new Error('Gagal memuat pustaka. Periksa koneksi internet.'); });
+    return pustaka[kunci];
   }
+  const URL_JSQR = ['https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js', 'https://unpkg.com/jsqr@1.4.0/dist/jsQR.js'];
   const LIB = {
     qr: () => muatSkrip('https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js', 'qrcode'),
     xlsx: () => muatSkrip('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js', 'XLSX'),
-    kamera: () => muatSkrip('https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js', 'Html5Qrcode')
+    jsqr: () => muatSkrip(URL_JSQR, 'jsQR'),
+    URL_JSQR
   };
   function qrSvg(teks) {
-    const q = window.qrcode(0, 'M');
+    const q = window.qrcode(0, 'Q'); // koreksi galat Q: tetap terbaca walau kartu kusut/tergores
     q.addData(String(teks)); q.make();
     const n = q.getModuleCount(), m = 2;
     let d = '';
@@ -325,5 +331,5 @@
   function uuid() { return (crypto.randomUUID && crypto.randomUUID()) || ('id-' + Date.now() + '-' + Math.random().toString(16).slice(2)); }
 
   EV.ui = { esc, ic, $, $$, fmt, toast, hasil, modal, konfirmasi, sibuk, ring, foto, avatar, pillCalon, pillStatus, hitungNaik,
-    bacaFile, perkecilLogo, potongFoto, LIB, qrSvg, konfeti, bunyi, Activity, debounce, unduhTeks, csv, salin, kontras, uuid };
+    bacaFile, perkecilLogo, potongFoto, LIB, muatSkrip, qrSvg, konfeti, bunyi, Activity, debounce, unduhTeks, csv, salin, kontras, uuid };
 })();
